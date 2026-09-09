@@ -17,7 +17,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install project
         run: pip install -e .
-      - name: Run adversarial tests
+      - name: Run all regression tests
         run: python -m unittest discover -s tests -v
-      - name: Generate evaluation
+      - name: Generate adversarial evaluation
         run: python scripts/run_evaluation.py
+      - name: Generate benign task evaluation
+        run: python scripts/run_benign_evaluation.py
+      - name: Generate v0.2 metrics
+        run: python scripts/run_v2_metrics.py

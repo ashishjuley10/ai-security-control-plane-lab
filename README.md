@@ -23,6 +23,18 @@ The hardened design applies:
 
 The project does **not** claim to solve prompt injection or make a foundation model inherently safe. The objective is to reduce blast radius when model behavior is unsafe or unpredictable.
 
+## What this project demonstrates
+
+This repository is intended to show more than a working security demo. It documents the engineering decisions required to turn an initial proof of concept into a testable control-validation lab:
+
+- separating **model behavior** from **application authorization**
+- defining explicit security oracles instead of judging outputs by eye
+- measuring both attack resistance and legitimate task success
+- validating the architecture with both a deterministic risky model and a live model provider
+- handling API failures and rate limits without silently producing misleading metrics
+- correcting test-oracle and implementation mismatches when they are discovered
+- preserving limitations and corpus-revision notes rather than retrospectively changing claims
+
 ## Verified results
 
 ### Deterministic control-plane regression
@@ -78,6 +90,70 @@ docs/real_model_results.json
 ```
 
 Real-model benign-task retention is implemented separately and will only be quoted after a complete error-free run.
+
+## Engineering challenges and decisions
+
+### 1. A mock model can make security results look trivial
+
+The first version deliberately used a risky deterministic model because it made security-control failures reproducible. That was useful for validating the architecture, but it did not answer whether the same controls mattered when a real model already refused some malicious requests.
+
+The lab therefore added a native real-model evaluation path. The real-model result was less dramatic than the deterministic baseline, which is exactly why it is useful: the model resisted many attacks on its own, but **7 of 24 defined attacks still succeeded in the unprotected architecture**, while the hardened control plane prevented those outcomes in the same run.
+
+**Decision:** keep the deterministic model for repeatable regression testing, and use the real model as a separate empirical evaluation rather than mixing the two claims.
+
+### 2. Prompt-injection detection is not an authorization boundary
+
+Early attack cases made it tempting to focus on spotting phrases such as “ignore previous instructions”. That approach is inherently incomplete because attacks can be indirect, obfuscated or expressed in ways a detector has never seen.
+
+**Decision:** prompt-injection signals are telemetry only. Authorization is enforced outside the model using deterministic tool policy, account scope and least privilege.
+
+### 3. Failed API calls can create misleading security metrics
+
+During development, real-model evaluation encountered quota and rate-limit errors. A naive evaluator could have counted failed calls as safe outcomes and reported an artificially low attack-success rate.
+
+**Decision:** the evaluator tracks attempted and successful API calls separately, records the first error, reports incomplete runs clearly, and refuses to present an ASR reduction when a valid comparison cannot be made. Rate-limit-aware pacing and retry handling were added so the benchmark can complete cleanly.
+
+### 4. “Block everything” is not a useful security architecture
+
+A system that rejects every request would score perfectly against an attack corpus while being unusable.
+
+**Decision:** add a separate benign regression set and track task-success rate alongside ASR. The deterministic hardened architecture currently retains **8/8 benign tasks (100%)** while preventing the defined adversarial outcomes.
+
+### 5. The resource-budget oracle exposed a test-design bug
+
+The application intended to cap final output at 2,000 characters, but an earlier implementation truncated to 2,000 characters and then appended the `...[TRUNCATED]` suffix. The corresponding attack oracle also allowed 2,100 characters. That meant implementation and test policy were not enforcing the same boundary.
+
+**Decision:** make the final response, including the truncation suffix, fit within the 2,000-character limit and align all unbounded-consumption oracles to that same boundary. The deterministic corpus then correctly produced **100% vulnerable ASR and 0% hardened ASR**.
+
+The existing GPT-5.6 Luna result is explicitly retained as a result from the earlier corpus revision rather than being silently re-scored after the fix.
+
+## Project evolution
+
+### v0.1 — architecture and adversarial controls
+
+- deliberately vulnerable and hardened execution paths
+- deterministic risky model
+- tool authorization and account scoping
+- output redaction/encoding and resource controls
+- adversarial attack corpus and security oracles
+
+### v0.2 — security plus usefulness
+
+- expanded deterministic metrics
+- benign functionality regression set
+- ASR and benign TSR reported together
+- CI coverage across supported Python versions
+
+### v0.2.1 — real-model validation
+
+- native OpenAI Responses provider
+- token-usage tracking
+- real-model adversarial evaluation
+- explicit incomplete-run/error handling
+- rate-limit-aware pacing and retries
+- provider/parser regression tests
+- corrected 2,000-character output-budget boundary and aligned oracles
+- documented corpus limitations and revision history
 
 ## Architecture
 

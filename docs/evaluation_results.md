@@ -1,9 +1,11 @@
 # Adversarial Evaluation Results
 
-> Deterministic control-validation suite. These results measure the application security control plane against defined attack oracles; they are not a benchmark of any foundation model.
+> Deterministic control-validation suite. These results measure the application
+> security control plane against defined attack oracles; they are not a benchmark
+> of any foundation model.
 
-**Cases:** 24  
-**Vulnerable baseline secure:** 0/24  
+**Cases:** 24
+**Vulnerable baseline secure:** 0/24
 **Hardened control plane secure:** 24/24
 
 | OWASP risk | Baseline | Hardened |
@@ -17,4 +19,4 @@
 
 ## Security design conclusion
 
-The lab intentionally assumes that model behaviour can be manipulated. The hardened architecture therefore moves authorization, customer scoping, state-change policy, output encoding/redaction and resource budgets outside the model.
+The lab intentionally assumes that model behavior can be manipulated. The hardened architecture therefore moves authorization, customer scoping, state-change policy, output encoding/redaction and resource budgets outside the model.

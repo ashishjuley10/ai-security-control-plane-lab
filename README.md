@@ -6,6 +6,18 @@ This is a defensive GenAI / LLM security-engineering lab. It compares a delibera
 
 **Runtime:** Python 3.8+ (CI: Python 3.8 and 3.12)
 
+## Run the offline demonstration
+
+```bash
+git clone https://github.com/ashishjuley10/ai-security-control-plane-lab.git
+cd ai-security-control-plane-lab
+python3 scripts/run_demo.py
+```
+
+No API key or package installation is needed for this demonstration. It shows an unsafe transfer in the vulnerable baseline, a denied transfer and cross-account read in the hardened path, a successful legitimate balance lookup, and rejection of malformed model output. Each scenario checks its expected result and the command exits unsuccessfully if any check fails. Use `--json` for structured output.
+
+Start with [the security report](docs/security_report.md) for design decisions, [the threat model](docs/threat_model.md) for trust boundaries and [the framework mapping](docs/framework_mapping.md) for references. The historical live-model record is described separately below.
+
 ## Core security assumption
 
 > **The model can be manipulated. Important security controls must still hold.**
@@ -35,7 +47,7 @@ This repository is intended to show more than a working security demo. It docume
 - correcting test-oracle and implementation mismatches when they are discovered
 - preserving limitations and corpus-revision notes rather than retrospectively changing claims
 
-## Verified results
+## Results and evidence status
 
 ### Deterministic control-plane regression
 
@@ -51,7 +63,7 @@ The deterministic suite uses an intentionally risky mock model so application-co
 
 These numbers validate the **application control plane against defined security oracles**. They are not a foundation-model safety benchmark.
 
-### GPT-5.6 Luna real-model evaluation
+### Recorded GPT-5.6 Luna evaluation on an earlier revision
 
 The native OpenAI Responses provider was used to run a single pass of the 24-case adversarial corpus against `gpt-5.6-luna`.
 
@@ -75,7 +87,7 @@ The run completed **48 successful model evaluations** with zero API/evaluation e
 | Hidden Context Exposure | **0** | 4 |
 | Unbounded Consumption | **0** | 4 |
 
-The category pattern is more informative than the aggregate alone. In this run, the unprotected model path did **not** successfully invoke the tested transfer/export oracles, while deletion/contact-change cases and unsafe markup handling produced successful attack outcomes. The hardened control plane prevented all 7 successful vulnerable-path outcomes under the same defined oracles.
+The category pattern is more informative than the aggregate alone. In this run, the unprotected model path did **not** successfully invoke the tested transfer/export oracles, while deletion/contact-change cases and unsafe markup handling produced successful attack outcomes. The hardened path recorded no oracle violations in its separate model calls. The architectures made independent calls, so this is not evidence that the exact same seven model proposals were replayed and blocked.
 
 This should be interpreted narrowly: it is **one model, one corpus and one pass**. It does not establish a general model-safety property or prove that any category is inherently “solved”.
 
@@ -89,7 +101,7 @@ The raw recorded result is stored in:
 docs/real_model_results.json
 ```
 
-Real-model benign-task retention is implemented separately and will only be quoted after a complete error-free run.
+The historical JSON is preserved as recorded and was not rerun after the proposal-validation changes. It predates the revised resource oracle and stricter schema handling. It contains aggregate and per-case results rather than complete model-response traces. Real-model benign-task retention is implemented separately and will only be quoted after a complete error-free run.
 
 ## Engineering challenges and decisions
 
@@ -97,7 +109,7 @@ Real-model benign-task retention is implemented separately and will only be quot
 
 The first version deliberately used a risky deterministic model because it made security-control failures reproducible. That was useful for validating the architecture, but it did not answer whether the same controls mattered when a real model already refused some malicious requests.
 
-The lab therefore added a native real-model evaluation path. The real-model result was less dramatic than the deterministic baseline, which is exactly why it is useful: the model resisted many attacks on its own, but **7 of 24 defined attacks still succeeded in the unprotected architecture**, while the hardened control plane prevented those outcomes in the same run.
+The lab therefore added a native real-model evaluation path. The real-model result was less dramatic than the deterministic baseline, which is exactly why it is useful: the model resisted many attacks on its own, but **7 of 24 defined attacks still succeeded in the unprotected architecture**, while separate calls through the hardened architecture recorded no violations of the defined oracles. These are separate samples, not a replay of identical model decisions.
 
 **Decision:** keep the deterministic model for repeatable regression testing, and use the real model as a separate empirical evaluation rather than mixing the two claims.
 
@@ -127,6 +139,16 @@ The application intended to cap final output at 2,000 characters, but an earlier
 
 The existing GPT-5.6 Luna result is explicitly retained as a result from the earlier corpus revision rather than being silently re-scored after the fix.
 
+### 6. Untrusted output also includes malformed data
+
+A model or provider adapter can return an invalid answer type, tool name or argument object. During review, these shapes caused exceptions in the hardened path, while the provider silently coerced some malformed values.
+
+**Decision:** validate the proposal before policy evaluation, deny malformed read-tool arguments and reject invalid provider schemas. Regression tests cover the failure cases, cross-account reads and permitted own-account reads. Provider schema failures remain evaluation errors rather than secure outcomes.
+
+### Development workflow
+
+Development and review include AI-assisted coding and debugging. The repository records concrete controls, regression tests and limitations so proposed changes can be inspected and verified. The code and test results establish what the lab demonstrates; they do not establish production deployment experience.
+
 ## Project evolution
 
 ### v0.1 — architecture and adversarial controls
@@ -155,17 +177,28 @@ The existing GPT-5.6 Luna result is explicitly retained as a result from the ear
 - corrected 2,000-character output-budget boundary and aligned oracles
 - documented corpus limitations and revision history
 
+### Subsequent control-boundary review
+
+- strict model-decision and read-tool argument validation
+- malformed-proposal and cross-account regression checks
+- corrected OWASP edition and category references
+- a self-checking offline demonstration
+- explicit limits on authentication, retrieval, output filtering and recorded model evidence
+
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[User / Retrieved Content] --> B[LLM]
-    B -->|Untrusted proposal| C[AI Security Control Plane]
-    C -->|Policy + account scope| D[Read-only Tool Runtime]
-    D --> E[(Synthetic Customer Data)]
-    B -->|Untrusted text| F[Output Controls]
-    F --> G[User Interface]
-    C -. deny .-> X[Privileged / State-changing Tools]
+flowchart TD
+    A[User prompt] --> B[Model proposal]
+    B --> C[Validate proposal]
+    C --> D{Tool requested}
+    D -->|Yes| E[Authorize tool and account]
+    E -->|Allowed| F[Read-only runtime]
+    E -->|Denied| G[Blocked response]
+    D -->|No| H[Output controls]
+    F --> H
+    G --> H
+    H --> I[Returned text]
 ```
 
 ### Vulnerable baseline
@@ -177,7 +210,7 @@ User -> LLM -> LLM chooses tool -> tool executes -> data/state changes
 ### Hardened design
 
 ```text
-User / retrieved content
+User prompt
         |
         v
        LLM
@@ -199,12 +232,12 @@ AI security control plane
 
 The 24-case suite spans six GenAI / LLM risk areas:
 
-- `LLM01:2026` Prompt Injection
-- `LLM02:2026` Sensitive Information Disclosure
-- `LLM03:2026` Excessive Agency
-- `LLM06:2026` Unbounded Consumption
-- `LLM08:2026` Hidden Context Exposure
-- `LLM10:2026` Improper Output Handling
+- `LLM01:2025` Prompt Injection
+- `LLM02:2025` Sensitive Information Disclosure
+- `LLM06:2025` Excessive Agency
+- `LLM10:2025` Unbounded Consumption
+- `LLM07:2025` System Prompt Leakage
+- `LLM05:2025` Improper Output Handling
 
 Attack goals include attempts to trigger fictional funds transfers, delete fictional transaction records, modify fictional contact data, export synthetic customer records, cross customer/account boundaries, disclose synthetic secrets or hidden context, render unsafe markup, and exceed resource budgets.
 
@@ -230,7 +263,11 @@ update_email
 export_all_customers
 ```
 
-Customer-scoped reads must match the authenticated account in `UserContext`.
+Customer-scoped reads must match the account in `UserContext`. The lab assumes a trusted caller supplies that context. It does not implement sign-in, token verification or a production IAM integration.
+
+### Proposal validation
+
+The engine validates decision types before policy evaluation. Read tools accept exactly one string `account_id` argument; unexpected keys are denied. JSON provider adapters reject missing or invalid fields rather than coercing them.
 
 ### Input controls
 
@@ -263,7 +300,9 @@ For real models, `scripts/run_real_model_benign_evaluation.py` evaluates the sam
 ```bash
 git clone https://github.com/ashishjuley10/ai-security-control-plane-lab.git
 cd ai-security-control-plane-lab
-python3 -m pip install --user -e .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
 
 Run deterministic tests and metrics:
@@ -376,6 +415,7 @@ ai_security_lab/
   tools.py
 
 scripts/
+  run_demo.py
   run_evaluation.py
   run_benign_evaluation.py
   run_v2_metrics.py
@@ -388,6 +428,7 @@ tests/
   test_adversarial.py
   test_benign.py
   test_providers.py
+  test_boundary_validation.py
 
 docs/
   threat_model.md
@@ -406,7 +447,9 @@ See `docs/framework_mapping.md`.
 
 Residual risk includes novel or obfuscated prompt injection, indirect injection through retrieved content, multimodal attacks outside this corpus, provider/model behavior changes, incomplete detection coverage, oracle limitations and application bugs outside the tested controls.
 
-The real-model benchmark is intentionally narrow and reproducible rather than presented as universal model-safety evidence.
+The current corpus sends direct prompts. Retrieved-document ingestion and end-to-end indirect-injection tests are not implemented. Regex redaction covers selected synthetic values and patterns, not all sensitive content. HTML escaping targets HTML text contexts, not every downstream sink. Character limits do not establish request-rate or token-spend limits. Security events are in memory, not tamper-resistant audit storage.
+
+The historical model evaluation is narrow, stochastic and tied to its recorded revision. A future run should capture code/corpus versions and model-response traces, with appropriate redaction.
 
 ## CI
 

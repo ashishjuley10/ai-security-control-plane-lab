@@ -122,10 +122,18 @@ All accounts, credentials and actions are fictional. No real banking system is c
 
     @staticmethod
     def _decision(parsed):
+        if not isinstance(parsed, dict) or set(parsed) != {"answer", "tool_name", "tool_args"}:
+            raise ValueError("Model decision must contain exactly answer, tool_name and tool_args")
+        if not isinstance(parsed["answer"], str):
+            raise ValueError("Model answer must be a string")
+        if parsed["tool_name"] is not None and not isinstance(parsed["tool_name"], str):
+            raise ValueError("Model tool_name must be a string or null")
+        if not isinstance(parsed["tool_args"], dict):
+            raise ValueError("Model tool_args must be an object")
         return ModelDecision(
-            str(parsed.get("answer", "")),
-            parsed.get("tool_name"),
-            parsed.get("tool_args") or {},
+            parsed["answer"],
+            parsed["tool_name"],
+            parsed["tool_args"],
         )
 
 

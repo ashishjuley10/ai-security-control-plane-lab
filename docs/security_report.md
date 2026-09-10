@@ -1,53 +1,23 @@
-# Security Engineering Report
+# Security engineering report
 
 ## Design question
 
-**What happens when the model is successfully manipulated?**
+What happens when the model proposes an unsafe action? The lab compares direct execution with application-enforced authorization using synthetic banking data.
 
-The vulnerable baseline implicitly trusts model decisions. A model can therefore turn a prompt injection or hallucination into a privileged tool call, customer-data leak or unsafe downstream output.
+## Implemented boundaries
 
-The hardened design assumes the model can be wrong or manipulated. Controls are placed at deterministic application boundaries.
+The hardened engine validates proposal types before use, restricts execution to two read-only tools and requires the requested account to match trusted caller context. Output controls redact selected synthetic values, HTML-escape text and enforce a character limit. Security events record decisions in memory. The provider adapters reject invalid decision schemas as errors.
 
-## Implemented controls
+## Evidence
 
-### 1. Tool authorization outside the LLM
-The LLM may propose a tool, but `ToolPolicy` independently checks whether that capability is permitted.
+The deterministic corpus contains 24 attack scenarios and eight legitimate tasks. The review reproduces zero hardened oracle violations while legitimate tasks remain usable. The vulnerable mock deliberately follows the unsafe requests; its failure rate is not representative of a general-purpose model. The test suite also covers malformed proposals and cross-account reads.
 
-### 2. Least privilege
-The AI receives only two read-only tools: `get_balance` and `get_transactions`.
+The historical real-model JSON records a separate, single-pass evaluation. It was not rerun during this review and cannot establish the behavior of the changed parser or control plane. Read the README and review notes before quoting it.
 
-Transfers, deletion, profile modification and bulk export are denied.
+## Limits
 
-### 3. Object-level authorization
-Read operations are constrained to the authenticated customer's account.
+Authentication is assumed; no identity provider is integrated. The corpus contains no implemented retrieval pipeline. Known-value regex redaction is bypassable and does not provide general DLP. HTML escaping is appropriate for HTML text contexts, not every downstream sink. Character limits do not replace rate limits or token and cost budgets. In-memory security events do not constitute a production audit trail.
 
-### 4. Sensitive-output controls
-Known secrets and account-number patterns are redacted before release.
+## Next work selected by risk
 
-### 5. Output encoding
-Model output is treated as untrusted text and HTML-escaped before rendering.
-
-### 6. Consumption budgets
-Inputs and outputs are bounded to reduce uncontrolled resource use.
-
-### 7. Security telemetry
-Control activations and denied tool calls are recorded as security events.
-
-## Important limitation
-
-The `MockRiskyLLM` is deterministic by design. It allows the security-control layer to be tested reproducibly without relying on a stochastic external model.
-
-An optional OpenAI-compatible provider is included for extension, but the core claim is not "my model cannot be fooled." The claim is:
-
-> A manipulated model should not automatically become an authorised banking actor.
-
-## Next engineering iterations
-
-- Policy-as-code rules with richer role/capability models
-- Human approval for high-risk actions
-- Retrieval trust labels and provenance
-- Indirect prompt-injection test corpus
-- Security event export to SIEM
-- Rate limiting and per-user cost budgets
-- CI adversarial regression gates
-- Real-model evaluation with attack success rate and false-positive measurements
+For a real deployment, bind caller identity to server-side entitlements, limit data before it enters context, validate tool arguments against strict schemas, enforce authorization again in the backend, and add persistent redacted audit events. Extend evaluation to retrieval poisoning, repeated model runs and benign model-backed tasks. Use a private test environment with synthetic data.

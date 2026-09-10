@@ -42,8 +42,12 @@ class ToolPolicy:
 
     @staticmethod
     def authorize(tool_name, args, context: UserContext):
+        if not isinstance(tool_name, str) or not isinstance(args, dict):
+            return False, "invalid tool proposal"
         if tool_name not in ToolPolicy.READ_ONLY:
             return False, "state-changing or over-privileged tool denied"
+        if set(args) != {"account_id"} or not isinstance(args["account_id"], str):
+            return False, "invalid read-tool arguments"
         if args.get("account_id") != context.account_id:
             return False, "cross-account access denied"
         return True, "authorized"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from .controls import input_controls, output_controls
-from .models import SecurityResult, UserContext
+from .models import SecurityResult, UserContext, valid_model_decision
 from .providers import LLMProvider, MockRiskyLLM
 from .tools import ToolPolicy, ToolRuntime
 
@@ -27,6 +27,12 @@ class HardenedEngine:
     def process(self, prompt: str, context: UserContext) -> SecurityResult:
         clean_prompt, events = input_controls(prompt)
         decision = self.provider.decide(clean_prompt, context)
+        if not valid_model_decision(decision):
+            events.append("model_decision_invalid")
+            return SecurityResult(
+                "Request blocked by the AI security control plane.",
+                [], list(self.runtime.state_changes), events,
+            )
         output = decision.answer
         executed = []
         if decision.tool_name:

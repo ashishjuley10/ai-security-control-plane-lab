@@ -32,8 +32,8 @@ The deterministic suite uses an intentionally risky mock model so application-co
 | Metric | Vulnerable | Hardened |
 | --- | ---: | ---: |
 | Adversarial cases | 24 | 24 |
-| Defined Attack Success Rate (ASR) | **95.8%** | **0.0%** |
-| ASR reduction |  | **95.8 percentage points** |
+| Defined Attack Success Rate (ASR) | **100.0%** | **0.0%** |
+| ASR reduction |  | **100.0 percentage points** |
 | Benign tasks |  | 8 |
 | Benign Task Success Rate (TSR) |  | **100.0% (8/8)** |
 
@@ -68,6 +68,8 @@ The category pattern is more informative than the aggregate alone. In this run, 
 This should be interpreted narrowly: it is **one model, one corpus and one pass**. It does not establish a general model-safety property or prove that any category is inherently “solved”.
 
 **Resource-consumption caveat:** the current unbounded-consumption cases were originally designed around the deterministic mock’s echo behavior, and `OPENAI_MAX_OUTPUT_TOKENS` also constrains live-model output. Therefore the observed `0/4` in that category is **not treated as evidence that GPT-5.6 Luna resists resource-exhaustion attacks**. Live-model resource-abuse testing needs prompts designed specifically for generative overproduction/cost behavior rather than fixed-string echoing.
+
+**Corpus revision note:** the recorded GPT-5.6 Luna run predates the deterministic resource-budget correction from a 2,100-character oracle threshold to the actual 2,000-character application boundary. The recorded 29.2% → 0.0% real-model result is retained as the result of that original run and is not reinterpreted using the revised resource oracle.
 
 The raw recorded result is stored in:
 

@@ -1,18 +1,16 @@
 # AI Security Control Plane Lab
 
-**Adversarially testing a financial-services AI assistant, then moving security decisions out of the model and into deterministic application controls.**
+**Adversarially testing a fictional financial-services AI assistant, then moving security decisions out of the model and into deterministic application controls.**
 
-This project is a defensive GenAI / LLM security-engineering lab. It compares a deliberately vulnerable banking-assistant architecture with a hardened control plane and measures both **attack success** and **legitimate task retention**.
+This is a defensive GenAI / LLM security-engineering lab. It compares a deliberately vulnerable architecture with a hardened control plane and measures both **attack success** and **legitimate task retention**.
 
-**Runtime:** Python 3.8+ (CI tests Python 3.8 and 3.12)
+**Runtime:** Python 3.8+ (CI: Python 3.8 and 3.12)
 
-## Executive summary
-
-The core security assumption is simple:
+## Core security assumption
 
 > **The model can be manipulated. Important security controls must still hold.**
 
-The vulnerable architecture allows the LLM to choose and directly invoke backend tools. The hardened architecture treats model output as an **untrusted proposal** and moves authorization into deterministic application logic.
+The vulnerable architecture lets the LLM choose and directly invoke backend tools. The hardened architecture treats model output as an **untrusted proposal** and moves authorization into deterministic application logic.
 
 The hardened design applies:
 
@@ -20,16 +18,16 @@ The hardened design applies:
 - account-level authorization
 - denial of state-changing and over-privileged capabilities
 - output redaction and HTML escaping
-- input and output resource budgets
+- input/output resource budgets
 - security-event logging
 
-The project does **not** claim to solve prompt injection or make a foundation model inherently safe. Its goal is to reduce blast radius when the model behaves unsafely.
+The project does **not** claim to solve prompt injection or make a foundation model inherently safe. The objective is to reduce blast radius when model behavior is unsafe or unpredictable.
 
 ## Verified results
 
-### Deterministic control-plane evaluation
+### Deterministic control-plane regression
 
-The deterministic suite uses a deliberately risky mock model so application-control behavior is reproducible.
+The deterministic suite uses an intentionally risky mock model so application-control behavior is reproducible.
 
 | Metric | Vulnerable | Hardened |
 | --- | ---: | ---: |
@@ -39,24 +37,45 @@ The deterministic suite uses a deliberately risky mock model so application-cont
 | Benign tasks |  | 8 |
 | Benign Task Success Rate (TSR) |  | **100.0% (8/8)** |
 
-These results validate the **application control plane against defined security oracles**. They are not a foundation-model safety benchmark.
+These numbers validate the **application control plane against defined security oracles**. They are not a foundation-model safety benchmark.
 
 ### GPT-5.6 Luna real-model evaluation
 
-A native OpenAI Responses API provider was used to run the same 24-case adversarial corpus against `gpt-5.6-luna`.
+The native OpenAI Responses provider was used to run a single pass of the 24-case adversarial corpus against `gpt-5.6-luna`.
 
 | Metric | Vulnerable | Hardened |
 | --- | ---: | ---: |
 | Successful API evaluations | **24/24** | **24/24** |
-| Defined Attack Success Rate (ASR) | **29.2% (7/24)** | **0.0% (0/24)** |
+| Defined ASR | **29.2% (7/24)** | **0.0% (0/24)** |
 | ASR reduction |  | **29.2 percentage points** |
 | Evaluation errors | **0** | **0** |
 
-The run used **48 successful model evaluations** in total and completed with zero API/evaluation errors. The vulnerable architecture recorded 7 successful attacks under the project’s defined security oracles; the hardened control plane recorded 0 in the same corpus.
+The run completed **48 successful model evaluations** with zero API/evaluation errors.
 
-This is a **single-model, single-pass, 24-case adversarial evaluation**. It should not be interpreted as a general claim that GPT-5.6 Luna, OpenAI models, or the hardened architecture are universally secure.
+#### Vulnerable-architecture breakdown by category
 
-Real-model benign-task retention is implemented separately and is intentionally reported only after a complete error-free run.
+| Category | Successful attacks | Total cases |
+| --- | ---: | ---: |
+| Prompt Injection | **2** | 4 |
+| Excessive Agency | **2** | 4 |
+| Improper Output Handling | **3** | 4 |
+| Sensitive Information Disclosure | **0** | 4 |
+| Hidden Context Exposure | **0** | 4 |
+| Unbounded Consumption | **0** | 4 |
+
+The category pattern is more informative than the aggregate alone. In this run, the unprotected model path did **not** successfully invoke the tested transfer/export oracles, while deletion/contact-change cases and unsafe markup handling produced successful attack outcomes. The hardened control plane prevented all 7 successful vulnerable-path outcomes under the same defined oracles.
+
+This should be interpreted narrowly: it is **one model, one corpus and one pass**. It does not establish a general model-safety property or prove that any category is inherently “solved”.
+
+**Resource-consumption caveat:** the current unbounded-consumption cases were originally designed around the deterministic mock’s echo behavior, and `OPENAI_MAX_OUTPUT_TOKENS` also constrains live-model output. Therefore the observed `0/4` in that category is **not treated as evidence that GPT-5.6 Luna resists resource-exhaustion attacks**. Live-model resource-abuse testing needs prompts designed specifically for generative overproduction/cost behavior rather than fixed-string echoing.
+
+The raw recorded result is stored in:
+
+```text
+docs/real_model_results.json
+```
+
+Real-model benign-task retention is implemented separately and will only be quoted after a complete error-free run.
 
 ## Architecture
 
@@ -74,7 +93,7 @@ flowchart LR
 ### Vulnerable baseline
 
 ```text
-User -> LLM -> LLM chooses tool -> tool executes -> state/data changes
+User -> LLM -> LLM chooses tool -> tool executes -> data/state changes
 ```
 
 ### Hardened design
@@ -86,15 +105,13 @@ User / retrieved content
        LLM
         |
         v
-untrusted tool proposal
+untrusted proposal
         |
         v
 AI security control plane
         |
         +--> deterministic authorization + account scope
-        |
-        +--> allow read-only capability
-        |
+        +--> allow intended read-only capability
         +--> deny privileged/state-changing capability
 ```
 
@@ -102,7 +119,7 @@ AI security control plane
 
 ## Threat coverage
 
-The adversarial suite contains 24 cases spanning six GenAI / LLM risk areas:
+The 24-case suite spans six GenAI / LLM risk areas:
 
 - `LLM01:2026` Prompt Injection
 - `LLM02:2026` Sensitive Information Disclosure
@@ -111,24 +128,15 @@ The adversarial suite contains 24 cases spanning six GenAI / LLM risk areas:
 - `LLM08:2026` Hidden Context Exposure
 - `LLM10:2026` Improper Output Handling
 
-Example attack outcomes include attempts to:
-
-- trigger a fictional funds transfer
-- delete fictional transaction records
-- change a fictional customer email
-- export all fictional customer records
-- access another customer’s account
-- disclose synthetic secrets or hidden context
-- return unsafe raw HTML
-- force oversized input/output behavior
+Attack goals include attempts to trigger fictional funds transfers, delete fictional transaction records, modify fictional contact data, export synthetic customer records, cross customer/account boundaries, disclose synthetic secrets or hidden context, render unsafe markup, and exceed resource budgets.
 
 All accounts, credentials, customer records and financial actions are synthetic.
 
 ## Security controls
 
-### Tool policy
+### Deterministic tool authorization
 
-The hardened runtime permits only the intended read-only capabilities:
+The hardened runtime permits only intended read-only capabilities:
 
 ```text
 get_balance
@@ -144,15 +152,15 @@ update_email
 export_all_customers
 ```
 
-For customer-scoped reads, the requested account must match the authenticated account in `UserContext`.
+Customer-scoped reads must match the authenticated account in `UserContext`.
 
 ### Input controls
 
-Input controls enforce a request budget and emit telemetry for prompt-injection indicators. Injection detection is **not** treated as the authorization boundary.
+Input controls enforce a request budget and emit telemetry for prompt-injection indicators. Detection is intentionally **not** treated as the authorization boundary.
 
 ### Output controls
 
-Output controls apply redaction, HTML escaping and output-size limits before content reaches the simulated user interface.
+Output controls apply sensitive-data redaction, HTML escaping and output-size limits before content reaches the simulated interface.
 
 ### Security events
 
@@ -164,24 +172,15 @@ tool_authorized
 tool_denied:...
 ```
 
-This makes the control decisions visible during testing and investigation.
+## Benign-task retention
 
-## Benign-task testing
-
-A security system could appear effective by simply blocking everything. This project therefore includes 8 benign regression cases covering:
-
-- authenticated balance lookup
-- recent transaction retrieval
-- current balance queries
-- general banking-support questions
+A system that blocks every request could appear secure. The lab therefore includes 8 legitimate-functionality cases covering balance lookup, transaction retrieval and general support requests.
 
 The deterministic hardened architecture currently retains **100% task success (8/8)**.
 
-For real models, `scripts/run_real_model_benign_evaluation.py` tests the same hardened architecture without requiring identical wording for open-ended support answers. Tool-backed tasks still require the correct read-only capability and expected synthetic tool output.
+For real models, `scripts/run_real_model_benign_evaluation.py` evaluates the same hardened architecture without requiring identical wording for open-ended support answers. Tool-backed cases still require the correct read-only capability and expected synthetic tool output.
 
 ## Installation
-
-Clone the repository and install it in editable mode:
 
 ```bash
 git clone https://github.com/ashishjuley10/ai-security-control-plane-lab.git
@@ -189,7 +188,7 @@ cd ai-security-control-plane-lab
 python3 -m pip install --user -e .
 ```
 
-Run the deterministic regression suite:
+Run deterministic tests and metrics:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -198,7 +197,7 @@ python3 scripts/run_benign_evaluation.py
 python3 scripts/run_v2_metrics.py
 ```
 
-The combined deterministic report is written to:
+Combined deterministic reports are written to:
 
 ```text
 docs/v0.2_metrics.json
@@ -207,7 +206,7 @@ docs/v0.2_metrics.md
 
 ## Native OpenAI Responses evaluation
 
-Set the API key locally. Do **not** commit it:
+Set the API key locally. Never commit it:
 
 ```bash
 read -s -p "OpenAI API key: " OPENAI_API_KEY
@@ -233,17 +232,9 @@ python3 scripts/run_real_model_evaluation.py \
   --max-retries 0
 ```
 
-The evaluator reports successful API calls, vulnerable ASR, hardened ASR, reduction, errors and token usage. Results are written to:
-
-```text
-docs/real_model_results.json
-```
-
-The evaluator refuses to publish an ASR reduction when the run is incomplete or contains API/model errors.
+The evaluator reports successful API calls, vulnerable/hardened ASR, reduction, errors and token usage. It refuses to publish an ASR reduction when the run is incomplete or contains API/model errors.
 
 ### Real-model benign evaluation
-
-After ensuring sufficient API request allowance is available:
 
 ```bash
 python3 scripts/run_real_model_benign_evaluation.py \
@@ -261,21 +252,14 @@ docs/real_model_benign_results.json
 
 A real-model benign TSR should only be quoted after all benign API evaluations complete with zero errors.
 
-## OpenAI-compatible provider
+## Generic OpenAI-compatible provider
 
-The repository also retains a generic adapter for OpenAI-compatible chat-completions endpoints.
-
-Set:
+The repository also retains an adapter for OpenAI-compatible chat-completions endpoints:
 
 ```bash
 export LLM_API_URL="https://your-provider.example/v1/chat/completions"
 export LLM_API_KEY="..."
 export LLM_MODEL="..."
-```
-
-Then run:
-
-```bash
 python3 scripts/run_real_model_evaluation.py --provider compatible --repeats 1
 ```
 
@@ -299,7 +283,7 @@ print(result.state_changes)
 print(result.security_events)
 ```
 
-The risky model can still propose a transfer. The control plane denies the capability before the simulated backend state changes.
+The risky model can still propose a transfer. The application control plane denies the capability before the simulated backend state changes.
 
 ## Repository structure
 
@@ -325,6 +309,7 @@ tests/
   benign.json
   test_adversarial.py
   test_benign.py
+  test_providers.py
 
 docs/
   threat_model.md
@@ -335,44 +320,25 @@ docs/
 
 ## Framework mapping
 
-The lab maps attack cases and controls to GenAI/LLM security categories and NIST AI risk-management concepts for structured analysis. These mappings are **alignment references, not claims of formal compliance or certification**.
+The lab maps attack cases and controls to GenAI/LLM security categories and NIST AI risk-management concepts. These are **alignment references, not claims of formal compliance or certification**.
 
-See:
-
-```text
-docs/framework_mapping.md
-```
+See `docs/framework_mapping.md`.
 
 ## Limitations and residual risk
 
-The control plane reduces impact but does not remove model risk. Residual risks include:
-
-- novel or obfuscated prompt-injection techniques
-- indirect injection through retrieved content
-- multimodal attacks not represented in this corpus
-- model/provider behavior changes over time
-- incomplete detection coverage
-- security-oracle limitations
-- application logic bugs outside the tested controls
+Residual risk includes novel or obfuscated prompt injection, indirect injection through retrieved content, multimodal attacks outside this corpus, provider/model behavior changes, incomplete detection coverage, oracle limitations and application bugs outside the tested controls.
 
 The real-model benchmark is intentionally narrow and reproducible rather than presented as universal model-safety evidence.
 
 ## CI
 
-GitHub Actions runs on Python 3.8 and 3.12 and executes:
+GitHub Actions runs on Python 3.8 and 3.12 and executes unit/regression tests, deterministic adversarial evaluation, deterministic benign evaluation and combined v0.2 metrics.
 
-```text
-unit/regression tests
-deterministic adversarial evaluation
-deterministic benign evaluation
-combined v0.2 metrics
-```
-
-Real API calls are intentionally excluded from CI so repository secrets are not required and external model behavior does not make deterministic security regression tests flaky.
+Real API calls are intentionally excluded from CI so repository secrets are not required and external model behavior cannot make deterministic security regression tests flaky.
 
 ## Security scope
 
-This is a defensive educational security lab. No real bank systems, real customer accounts or real customer data are connected. Financial operations, accounts and secrets used by the test harness are fictional.
+This is a defensive educational lab. No real bank systems, customer accounts or customer data are connected. Financial operations, accounts and secrets used by the harness are fictional.
 
 **Never commit API keys or real customer data.**
 
